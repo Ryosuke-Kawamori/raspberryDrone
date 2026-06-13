@@ -2,14 +2,21 @@ import time
 from machine import Pin, UART
 
 from crsf import CrsfRcSender
-from pico_udp import UdpRcReceiver, connect_wifi
+from pico_udp import UdpRcReceiver, connect_wifi, start_access_point
 from rc_protocol import default_rc, rc_to_channels
 
 try:
-    from wifi_config import SSID, PASSWORD
+    from wifi_config import AP_PASSWORD, AP_SSID, WIFI_MODE
 except ImportError:
-    SSID = "YOUR_WIFI_SSID"
-    PASSWORD = "YOUR_WIFI_PASSWORD"
+    AP_SSID = "pico-drone"
+    AP_PASSWORD = "drone12345"
+    WIFI_MODE = "ap"
+
+try:
+    from wifi_config import STA_PASSWORD, STA_SSID
+except ImportError:
+    STA_SSID = ""
+    STA_PASSWORD = ""
 
 
 UDP_PORT = 5005
@@ -36,7 +43,10 @@ def make_uart():
 
 def main():
     led = Pin("LED", Pin.OUT)
-    connect_wifi(SSID, PASSWORD, led=led)
+    if WIFI_MODE == "sta":
+        connect_wifi(STA_SSID, STA_PASSWORD, led=led)
+    else:
+        start_access_point(AP_SSID, AP_PASSWORD, led=led)
 
     receiver = UdpRcReceiver(UDP_PORT)
     crsf = CrsfRcSender(make_uart())

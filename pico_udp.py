@@ -31,6 +31,32 @@ def connect_wifi(ssid, password, led=None, timeout_s=15):
     return wlan
 
 
+def start_access_point(ssid, password, led=None, channel=6):
+    sta = network.WLAN(network.STA_IF)
+    sta.active(False)
+
+    ap = network.WLAN(network.AP_IF)
+    ap.active(True)
+
+    if password:
+        ap.config(essid=ssid, password=password, channel=channel)
+    else:
+        ap.config(essid=ssid, channel=channel)
+
+    while not ap.active():
+        if led is not None:
+            led.toggle()
+        time.sleep_ms(100)
+
+    if led is not None:
+        led.on()
+
+    print("Pico AP started")
+    print("SSID:", ssid)
+    print("IP address:", ap.ifconfig()[0])
+    return ap
+
+
 class UdpRcReceiver:
     def __init__(self, port):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

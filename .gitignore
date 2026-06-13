@@ -1,3 +1,14 @@
 wifi_config.py
+
+# Python local environment and caches
+.venv/
+.venv_old*/
+venv/
+env/
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+
+# macOS
+.DS_Store

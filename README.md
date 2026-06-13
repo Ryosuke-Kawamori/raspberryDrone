@@ -5,6 +5,7 @@ Minimal split:
 - `pc_keyboard_ui.py`: PC keyboard UI. Sends RC commands to Pico W over UDP.
 - `pc_gamepad_ui.py`: PC gamepad UI. Sends RC commands and shows Pico ACK/status.
 - `pc_gamepad_probe.py`: Shows gamepad axis/button numbers for mapping.
+- `pc_hid_probe.py`: Raw HID probe for controllers that pygame/SDL cannot see.
 - `picomain.py`: Pico W entry point. Receives UDP commands and sends CRSF RC frames to FC.
 - `pico_udp.py`: Pico WiFi/UDP receiver.
 - `crsf.py`: CRSF frame packing and UART sender.
@@ -23,9 +24,16 @@ Copy these files to the Pico W:
 Create `wifi_config.py` from `wifi_config.example.py`:
 
 ```python
-SSID = "your-ssid"
-PASSWORD = "your-password"
+WIFI_MODE = "ap"
+
+AP_SSID = "pico-drone"
+AP_PASSWORD = "drone12345"
+
+STA_SSID = "your-home-wifi"
+STA_PASSWORD = "your-home-password"
 ```
+
+`WIFI_MODE = "ap"` makes the Pico W the Wi-Fi access point. This is the flight-oriented setup because it does not require an outdoor router.
 
 UART wiring for the default setup:
 
@@ -40,7 +48,7 @@ The FC receiver protocol should be set to CRSF.
 Run from this repo:
 
 ```bash
-python3 pc_keyboard_ui.py --ip 192.168.0.112
+python3 pc_keyboard_ui.py --ip 192.168.4.1
 ```
 
 For gamepad control, install pygame first:
@@ -55,10 +63,18 @@ Check the controller mapping:
 python3 pc_gamepad_probe.py
 ```
 
+If the controller appears in macOS `hidutil` but pygame says `No gamepad found`, try raw HID probing:
+
+```bash
+python3 -m pip install hidapi
+python3 pc_hid_probe.py --list
+python3 pc_hid_probe.py
+```
+
 Run the gamepad controller:
 
 ```bash
-python3 pc_gamepad_ui.py --ip 192.168.0.112
+python3 pc_gamepad_ui.py --ip 192.168.4.1
 ```
 
 The gamepad UI prints `ACK packets=...` when Pico is receiving UDP commands and replying with status.
