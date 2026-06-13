@@ -3,7 +3,9 @@
 Minimal split:
 
 - `pc_keyboard_ui.py`: PC keyboard UI. Sends RC commands to Pico W over UDP.
-- `main.py`: Pico W entry point. Receives UDP commands and sends CRSF RC frames to FC.
+- `pc_gamepad_ui.py`: PC gamepad UI. Sends RC commands and shows Pico ACK/status.
+- `pc_gamepad_probe.py`: Shows gamepad axis/button numbers for mapping.
+- `picomain.py`: Pico W entry point. Receives UDP commands and sends CRSF RC frames to FC.
 - `pico_udp.py`: Pico WiFi/UDP receiver.
 - `crsf.py`: CRSF frame packing and UART sender.
 - `rc_protocol.py`: Shared RC command defaults, clamps, and channel mapping.
@@ -12,7 +14,7 @@ Minimal split:
 
 Copy these files to the Pico W:
 
-- `main.py`
+- `picomain.py` as `main.py`
 - `crsf.py`
 - `pico_udp.py`
 - `rc_protocol.py`
@@ -40,6 +42,26 @@ Run from this repo:
 ```bash
 python3 pc_keyboard_ui.py --ip 192.168.0.112
 ```
+
+For gamepad control, install pygame first:
+
+```bash
+python3 -m pip install pygame
+```
+
+Check the controller mapping:
+
+```bash
+python3 pc_gamepad_probe.py
+```
+
+Run the gamepad controller:
+
+```bash
+python3 pc_gamepad_ui.py --ip 192.168.0.112
+```
+
+The gamepad UI prints `ACK packets=...` when Pico is receiving UDP commands and replying with status.
 
 Controls:
 

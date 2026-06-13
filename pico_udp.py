@@ -36,18 +36,31 @@ class UdpRcReceiver:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("0.0.0.0", port))
         self.sock.settimeout(0.0)
+        self.last_addr = None
+        self.packet_count = 0
         print("UDP port:", port)
 
     def receive(self):
         try:
-            data, _addr = self.sock.recvfrom(1024)
+            data, addr = self.sock.recvfrom(1024)
         except OSError:
             return None
 
         try:
             message = data.decode().strip()
             parsed = json.loads(message)
+            self.last_addr = addr
+            self.packet_count += 1
             return sanitize_rc(parsed)
         except Exception as exc:
             print("bad packet:", exc)
             return default_rc()
+
+    def send_status(self, status):
+        if self.last_addr is None:
+            return
+        try:
+            payload = json.dumps(status).encode()
+            self.sock.sendto(payload, self.last_addr)
+        except OSError:
+            pass

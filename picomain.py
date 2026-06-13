@@ -15,6 +15,7 @@ except ImportError:
 UDP_PORT = 5005
 LINK_TIMEOUT_MS = 500
 RC_PERIOD_MS = 20
+STATUS_PERIOD_MS = 200
 
 UART_ID = 0
 UART_TX_PIN = 0  # GP0 -> FC RX
@@ -43,6 +44,7 @@ def main():
     rc = default_rc()
     last_packet_ms = time.ticks_ms()
     last_send_ms = time.ticks_ms()
+    last_status_ms = time.ticks_ms()
 
     print("ready: UDP port", UDP_PORT)
 
@@ -60,6 +62,17 @@ def main():
         if time.ticks_diff(now, last_send_ms) >= RC_PERIOD_MS:
             crsf.send_channels(rc_to_channels(rc))
             last_send_ms = now
+
+        if time.ticks_diff(now, last_status_ms) >= STATUS_PERIOD_MS:
+            receiver.send_status(
+                {
+                    "type": "pico_status",
+                    "packets": receiver.packet_count,
+                    "link_age_ms": time.ticks_diff(now, last_packet_ms),
+                    "rc": rc,
+                }
+            )
+            last_status_ms = now
 
         time.sleep_ms(1)
 
