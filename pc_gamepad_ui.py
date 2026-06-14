@@ -9,6 +9,8 @@ from rc_protocol import THROTTLE_MAX, THROTTLE_MIN, clamp, default_rc, sanitize_
 
 SEND_HZ = 30
 STATUS_TIMEOUT_S = 1.0
+DEFAULT_STICK_SPAN = 250
+DEFAULT_DEADZONE = 0.08
 
 
 def load_pygame():
@@ -21,11 +23,11 @@ def load_pygame():
     return pygame
 
 
-def axis_value(joystick, axis, fallback=0.0):
+def axis_value(joystick, axis, fallback=0.0, deadzone=DEFAULT_DEADZONE):
     if axis < 0 or axis >= joystick.get_numaxes():
         return fallback
     value = joystick.get_axis(axis)
-    if abs(value) < 0.06:
+    if abs(value) < deadzone:
         return 0.0
     return value
 
@@ -36,7 +38,7 @@ def button_pressed(joystick, button):
     return joystick.get_button(button) == 1
 
 
-def stick_to_channel(value, center=1500, span=400, invert=False):
+def stick_to_channel(value, center=1500, span=DEFAULT_STICK_SPAN, invert=False):
     if invert:
         value = -value
     return int(clamp(center + value * span, 1000, 2000))
@@ -65,16 +67,27 @@ def read_status(sock):
             pass
 
 
-def send_rc(sock, address, rc):
-    payload = json.dumps(sanitize_rc(rc)).encode("utf-8")
+def rc_payload(rc, receiver_test=False):
+    cleaned = sanitize_rc(rc, force_throttle_low=not receiver_test)
+    if receiver_test:
+        cleaned["arm"] = False
+        cleaned["receiver_test"] = True
+    return cleaned
+
+
+def send_rc(sock, address, rc, receiver_test=False):
+    payload = json.dumps(rc_payload(rc, receiver_test=receiver_test)).encode("utf-8")
     sock.sendto(payload, address)
 
 
-def print_overview(joystick):
+def print_overview(joystick, stick_span, deadzone, receiver_test):
     print("Controller:", joystick.get_name())
     print("Axes:", joystick.get_numaxes(), "Buttons:", joystick.get_numbuttons())
     print("Default mapping: left X=roll axis0, left Y=pitch axis1, right X=yaw axis2")
     print("Buttons: throttle up button5, throttle down button4, arm button7, angle button6, panic button1")
+    print("Stick span: +/-{}us, deadzone: {}".format(stick_span, deadzone))
+    if receiver_test:
+        print("Receiver test mode: throttle can move while AUX arm is forced OFF.")
     print("Press Ctrl+C to stop. Stop sends disarm/throttle-low packets.")
 
 
@@ -91,6 +104,13 @@ def main():
     parser.add_argument("--invert-pitch", action="store_true")
     parser.add_argument("--invert-yaw", action="store_true")
     parser.add_argument("--invert-throttle", action="store_true")
+    parser.add_argument("--stick-span", type=int, default=DEFAULT_STICK_SPAN)
+    parser.add_argument("--deadzone", type=float, default=DEFAULT_DEADZONE)
+    parser.add_argument(
+        "--receiver-test",
+        action="store_true",
+        help="Force AUX arm off while allowing throttle channel movement for Betaflight Receiver checks.",
+    )
     parser.add_argument("--arm-button", type=int, default=7)
     parser.add_argument("--angle-button", type=int, default=6)
     parser.add_argument("--panic-button", type=int, default=1)
@@ -108,7 +128,7 @@ def main():
 
     joystick = pygame.joystick.Joystick(args.index)
     joystick.init()
-    print_overview(joystick)
+    print_overview(joystick, args.stick_span, args.deadzone, args.receiver_test)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(False)
@@ -133,16 +153,30 @@ def main():
                 rc["angle"] = not rc["angle"]
             prev_arm_pressed = arm_pressed
             prev_angle_pressed = angle_pressed
+            if args.receiver_test:
+                rc["arm"] = False
 
             if button_pressed(joystick, args.panic_button):
                 rc = default_rc()
             else:
-                rc["roll"] = stick_to_channel(axis_value(joystick, args.roll_axis), invert=args.invert_roll)
-                rc["pitch"] = stick_to_channel(axis_value(joystick, args.pitch_axis), invert=not args.invert_pitch)
-                rc["yaw"] = stick_to_channel(axis_value(joystick, args.yaw_axis), invert=args.invert_yaw)
+                rc["roll"] = stick_to_channel(
+                    axis_value(joystick, args.roll_axis, deadzone=args.deadzone),
+                    span=args.stick_span,
+                    invert=args.invert_roll,
+                )
+                rc["pitch"] = stick_to_channel(
+                    axis_value(joystick, args.pitch_axis, deadzone=args.deadzone),
+                    span=args.stick_span,
+                    invert=not args.invert_pitch,
+                )
+                rc["yaw"] = stick_to_channel(
+                    axis_value(joystick, args.yaw_axis, deadzone=args.deadzone),
+                    span=args.stick_span,
+                    invert=args.invert_yaw,
+                )
                 if args.throttle_axis >= 0:
                     rc["throttle"] = throttle_from_axis(
-                        axis_value(joystick, args.throttle_axis, fallback=-1.0),
+                        axis_value(joystick, args.throttle_axis, fallback=-1.0, deadzone=args.deadzone),
                         invert=args.invert_throttle,
                     )
                 else:
@@ -151,7 +185,7 @@ def main():
                     if button_pressed(joystick, args.throttle_down_button):
                         rc["throttle"] = clamp(rc["throttle"] - 4, THROTTLE_MIN, THROTTLE_MAX)
 
-            send_rc(sock, address, rc)
+            send_rc(sock, address, rc, receiver_test=args.receiver_test)
 
             status = read_status(sock)
             if status is not None:
@@ -165,10 +199,11 @@ def main():
                     last_status.get("link_age_ms", "?"),
                 )
 
+            displayed = rc_payload(rc, receiver_test=args.receiver_test)
             line = (
                 "roll={roll:4d} pitch={pitch:4d} thr={throttle:4d} yaw={yaw:4d} "
                 "arm={arm} angle={angle} | {link}"
-            ).format(link=link, **sanitize_rc(rc))
+            ).format(link=link, **displayed)
             sys.stdout.write("\r" + line[:120])
             sys.stdout.flush()
             time.sleep(period)

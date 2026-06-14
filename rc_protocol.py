@@ -31,7 +31,7 @@ def default_rc():
     }
 
 
-def sanitize_rc(data):
+def sanitize_rc(data, force_throttle_low=True):
     rc = default_rc()
     rc["roll"] = clamp(int(data.get("roll", rc["roll"])), ROLL_MIN, ROLL_MAX)
     rc["pitch"] = clamp(int(data.get("pitch", rc["pitch"])), PITCH_MIN, PITCH_MAX)
@@ -44,7 +44,7 @@ def sanitize_rc(data):
     rc["arm"] = safe_bool(data.get("arm", rc["arm"]))
     rc["angle"] = safe_bool(data.get("angle", rc["angle"]))
 
-    if not rc["arm"]:
+    if force_throttle_low and not rc["arm"]:
         rc["throttle"] = THROTTLE_MIN
 
     return rc

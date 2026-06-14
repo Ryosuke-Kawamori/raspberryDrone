@@ -77,6 +77,9 @@ class UdpRcReceiver:
             parsed = json.loads(message)
             self.last_addr = addr
             self.packet_count += 1
+            if parsed.get("receiver_test") is True:
+                parsed["arm"] = False
+                return sanitize_rc(parsed, force_throttle_low=False)
             return sanitize_rc(parsed)
         except Exception as exc:
             print("bad packet:", exc)

@@ -23,6 +23,7 @@ UDP_PORT = 5005
 LINK_TIMEOUT_MS = 500
 RC_PERIOD_MS = 20
 STATUS_PERIOD_MS = 200
+DEBUG_PERIOD_MS = 1000
 
 UART_ID = 0
 UART_TX_PIN = 0  # GP0 -> FC RX
@@ -55,6 +56,7 @@ def main():
     last_packet_ms = time.ticks_ms()
     last_send_ms = time.ticks_ms()
     last_status_ms = time.ticks_ms()
+    last_debug_ms = time.ticks_ms()
 
     print("ready: UDP port", UDP_PORT)
 
@@ -83,6 +85,21 @@ def main():
                 }
             )
             last_status_ms = now
+
+        if time.ticks_diff(now, last_debug_ms) >= DEBUG_PERIOD_MS:
+            print(
+                "rc roll={} pitch={} thr={} yaw={} arm={} angle={} packets={} link_age_ms={}".format(
+                    rc["roll"],
+                    rc["pitch"],
+                    rc["throttle"],
+                    rc["yaw"],
+                    rc["arm"],
+                    rc["angle"],
+                    receiver.packet_count,
+                    time.ticks_diff(now, last_packet_ms),
+                )
+            )
+            last_debug_ms = now
 
         time.sleep_ms(1)
 

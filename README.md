@@ -78,6 +78,17 @@ python3 pc_gamepad_ui.py --ip 192.168.4.1
 ```
 
 The gamepad UI prints `ACK packets=...` when Pico is receiving UDP commands and replying with status.
+The default stick span is `+/-250us` around center. For first FC receiver checks or very gentle tests, use a smaller span:
+
+```bash
+python3 pc_gamepad_ui.py --ip 192.168.4.1 --stick-span 150
+```
+
+For Betaflight Receiver tab checks, use receiver test mode. It keeps AUX arm forced off while allowing the throttle channel to move:
+
+```bash
+python3 pc_gamepad_ui.py --ip 192.168.4.1 --stick-span 150 --receiver-test
+```
 
 Controls:
 
