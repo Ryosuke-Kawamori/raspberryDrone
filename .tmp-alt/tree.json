@@ -1,0 +1,194 @@
+[
+  {
+    "name": ".github",
+    "path": ".github",
+    "sha": "7e47c83ff83442f067de425e090b0082adea1b1a",
+    "size": 0,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/.github?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/tree/master/.github",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/trees/7e47c83ff83442f067de425e090b0082adea1b1a",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/.github?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/trees/7e47c83ff83442f067de425e090b0082adea1b1a",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/tree/master/.github"
+    }
+  },
+  {
+    "name": ".readthedocs.yml",
+    "path": ".readthedocs.yml",
+    "sha": "27b87ad50def277aae801ac0e81ac1c9f106a0e9",
+    "size": 104,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/.readthedocs.yml?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/.readthedocs.yml",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/27b87ad50def277aae801ac0e81ac1c9f106a0e9",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/.readthedocs.yml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/.readthedocs.yml?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/27b87ad50def277aae801ac0e81ac1c9f106a0e9",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/.readthedocs.yml"
+    }
+  },
+  {
+    "name": "DESCRIPTION.rst",
+    "path": "DESCRIPTION.rst",
+    "sha": "649f66728b9847f489c8d0daebbeb22c7d001add",
+    "size": 133,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/DESCRIPTION.rst?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/DESCRIPTION.rst",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/649f66728b9847f489c8d0daebbeb22c7d001add",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/DESCRIPTION.rst",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/DESCRIPTION.rst?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/649f66728b9847f489c8d0daebbeb22c7d001add",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/DESCRIPTION.rst"
+    }
+  },
+  {
+    "name": "DOCUMENTATION.md",
+    "path": "DOCUMENTATION.md",
+    "sha": "c168f0e5ae1e2ea5a961809ed5ecf4fba5a6111c",
+    "size": 14688,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/DOCUMENTATION.md?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/DOCUMENTATION.md",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/c168f0e5ae1e2ea5a961809ed5ecf4fba5a6111c",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/DOCUMENTATION.md",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/DOCUMENTATION.md?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/c168f0e5ae1e2ea5a961809ed5ecf4fba5a6111c",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/DOCUMENTATION.md"
+    }
+  },
+  {
+    "name": "LICENSE",
+    "path": "LICENSE",
+    "sha": "b87605c395d5467b919773c5901a40a9d5be35e5",
+    "size": 1059,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/LICENSE?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/LICENSE",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/b87605c395d5467b919773c5901a40a9d5be35e5",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/LICENSE",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/LICENSE?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/b87605c395d5467b919773c5901a40a9d5be35e5",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/LICENSE"
+    }
+  },
+  {
+    "name": "README.md",
+    "path": "README.md",
+    "sha": "99783a8ee970a36253ebd578049c87ddce45d5f5",
+    "size": 7334,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/README.md?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/README.md",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/99783a8ee970a36253ebd578049c87ddce45d5f5",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/README.md",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/README.md?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/99783a8ee970a36253ebd578049c87ddce45d5f5",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/README.md"
+    }
+  },
+  {
+    "name": "docs",
+    "path": "docs",
+    "sha": "8e39ab6913109f43cc4448c4b8aa979c19d7b9d0",
+    "size": 0,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/docs?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/tree/master/docs",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/trees/8e39ab6913109f43cc4448c4b8aa979c19d7b9d0",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/docs?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/trees/8e39ab6913109f43cc4448c4b8aa979c19d7b9d0",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/tree/master/docs"
+    }
+  },
+  {
+    "name": "examples",
+    "path": "examples",
+    "sha": "251da6aa1e659e08542be9e24ec798502a89ac58",
+    "size": 0,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/examples?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/tree/master/examples",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/trees/251da6aa1e659e08542be9e24ec798502a89ac58",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/examples?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/trees/251da6aa1e659e08542be9e24ec798502a89ac58",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/tree/master/examples"
+    }
+  },
+  {
+    "name": "package.json",
+    "path": "package.json",
+    "sha": "11b5b455743c4ca71c304ff49899605be24f5d0a",
+    "size": 195,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/package.json?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/package.json",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/11b5b455743c4ca71c304ff49899605be24f5d0a",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/package.json",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/package.json?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/11b5b455743c4ca71c304ff49899605be24f5d0a",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/package.json"
+    }
+  },
+  {
+    "name": "pyproject.toml",
+    "path": "pyproject.toml",
+    "sha": "3f6bffa643b286b60cb35c680a573f7935a92d5a",
+    "size": 1628,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/pyproject.toml?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/pyproject.toml",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/3f6bffa643b286b60cb35c680a573f7935a92d5a",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/pyproject.toml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/pyproject.toml?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/3f6bffa643b286b60cb35c680a573f7935a92d5a",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/pyproject.toml"
+    }
+  },
+  {
+    "name": "qwiic_bmp581.py",
+    "path": "qwiic_bmp581.py",
+    "sha": "6cb95bceb73baeb23821ae89975c4b8a07f7e247",
+    "size": 44301,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/qwiic_bmp581.py?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/qwiic_bmp581.py",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/6cb95bceb73baeb23821ae89975c4b8a07f7e247",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/qwiic_bmp581.py",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/qwiic_bmp581.py?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/6cb95bceb73baeb23821ae89975c4b8a07f7e247",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/qwiic_bmp581.py"
+    }
+  },
+  {
+    "name": "requirements.txt",
+    "path": "requirements.txt",
+    "sha": "d636e781d290650b3acb86f86d2ce21d26183cba",
+    "size": 9,
+    "url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/requirements.txt?ref=master",
+    "html_url": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/requirements.txt",
+    "git_url": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/d636e781d290650b3acb86f86d2ce21d26183cba",
+    "download_url": "https://raw.githubusercontent.com/sparkfun/qwiic_bmp581_py/master/requirements.txt",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/contents/requirements.txt?ref=master",
+      "git": "https://api.github.com/repos/sparkfun/qwiic_bmp581_py/git/blobs/d636e781d290650b3acb86f86d2ce21d26183cba",
+      "html": "https://github.com/sparkfun/qwiic_bmp581_py/blob/master/requirements.txt"
+    }
+  }
+]

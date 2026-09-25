@@ -1,5 +1,8 @@
 # Raspberry Pico Drone Control
 
+Raspberry Pi Zero W can also replace the Pico W without changing the PC UIs.
+See [Pi Zero W setup, safety behavior, and tests](pi_zero/README.md).
+
 Minimal split:
 
 - `pc_keyboard_ui.py`: PC keyboard UI. Sends RC commands to Pico W over UDP.
