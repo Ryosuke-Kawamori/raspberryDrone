@@ -208,7 +208,7 @@ def test_uart_open_failure_exits_before_receiver(monkeypatch):
         raise OSError("UART unavailable")
     monkeypatch.setattr(SerialTransport, "open", fail)
     monkeypatch.setattr("pi_zero.main.UdpRcReceiver", lambda *_: pytest.fail("receiver opened"))
-    assert main([]) == 1
+    assert main(["--mode", "manual"]) == 1
 
 
 @pytest.mark.parametrize("signum", [2, 15])
@@ -223,7 +223,7 @@ def test_signal_safe_shutdown(monkeypatch, signum):
         assert should_stop()
     monkeypatch.setattr(app, "run_loop", loop)
     monkeypatch.setattr(app, "shutdown", lambda t: shutdown(t, clock, clock.sleep))
-    assert main([]) == 0
+    assert main(["--mode", "manual"]) == 0
     assert serial.closed
     assert len(serial.writes) == 50
     assert all(unpack(f)[2:5:2] == [192, 192] for _, f in serial.writes)
@@ -238,7 +238,7 @@ def test_loop_exception_safe_shutdown(monkeypatch):
         raise RuntimeError("input failure")
     monkeypatch.setattr(app, "run_loop", fail)
     monkeypatch.setattr(app, "shutdown", lambda t: shutdown(t, clock, clock.sleep))
-    assert main([]) == 1
+    assert main(["--mode", "manual"]) == 1
     assert serial.closed
     assert len(serial.writes) == 50
 

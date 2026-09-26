@@ -38,13 +38,18 @@ def run_loop(receiver, transport, state, should_stop,
         now = clock()
         state.expire(now)
         if now >= next_send:
-            transport.send(state.rc.copy())
+            runtime = getattr(state, "alt_runtime", None)
+            output = runtime.tick(now, state, max(0.0, now-next_send)) if runtime else state.rc.copy()
+            transport.send(output)
             next_send += RC_PERIOD_S
             if next_send <= clock():
                 # Do not burst old frames after a scheduler/IO delay.
                 next_send = clock() + RC_PERIOD_S
         if now >= next_status:
-            receiver.send_status(state.status(now, receiver.packet_count))
+            status = state.status(now, receiver.packet_count)
+            if getattr(state, "alt_runtime", None):
+                status["altitude"] = state.alt_runtime.status
+            receiver.send_status(status)
             next_status = now + STATUS_PERIOD_S
         sleep(max(0.0, min(0.001, next_send - clock())))
 
@@ -57,6 +62,12 @@ def parse_args(argv=None):
     parser.add_argument("--link-timeout-ms", type=int, default=500)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--mode", choices=("dry-run", "manual", "sensor-monitor", "shadow", "live", "simulation", "replay"), default="dry-run")
+    parser.add_argument("--alt-config")
+    parser.add_argument("--log", default="altitude.jsonl")
+    parser.add_argument("--duration", type=float)
+    parser.add_argument("--replay")
+    parser.add_argument("--enable-live", action="store_true")
     try:
         return Config(**vars(parser.parse_args(argv)))
     except ValueError as exc:
@@ -65,6 +76,27 @@ def parse_args(argv=None):
 
 def main(argv=None):
     config = parse_args(argv)
+    from pi_zero.alt_config import load_config
+    try:
+        alt_config = load_config(config.alt_config)
+        if config.mode == "live":
+            if not config.enable_live or config.dry_run:
+                raise ValueError("live requires --enable-live and cannot use --dry-run")
+            alt_config.validate_live()
+        if config.mode == "replay" and not config.replay:
+            raise ValueError("replay requires --replay PATH")
+    except (ValueError, TypeError, OSError) as exc:
+        print(str(exc))
+        return 2
+    if config.mode == "sensor-monitor":
+        from pi_zero.alt_runtime import monitor
+        monitor(alt_config, config.duration, config.log)
+        return 0
+    if config.mode in ("simulation", "replay"):
+        from pi_zero.experiments import simulate, replay
+        print(simulate(alt_config, config.log) if config.mode == "simulation" else
+              replay(alt_config if config.alt_config else None, config.replay, config.log))
+        return 0
     package_logger = logging.getLogger("pi_zero")
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
@@ -85,13 +117,25 @@ def main(argv=None):
     receiver = None
     previous_handlers = {}
     exit_code = 0
+    source = log_writer = None
+    started = time.monotonic()
     try:
         for signum in (signal.SIGINT, signal.SIGTERM):
             previous_handlers[signum] = signal.signal(signum, stop)
-        transport = (DryRunTransport() if config.dry_run else
+        runtime = None
+        if config.mode in ("shadow", "live"):
+            from pi_zero.alt_runtime import SensorProcesses, AsyncLog, AltRuntime
+            log_writer = AsyncLog(config.log, alt_config, config.mode)
+            source = SensorProcesses(alt_config)
+            runtime = AltRuntime(alt_config, config.mode, source, log_writer)
+        transport = (DryRunTransport() if config.dry_run or config.mode == "dry-run" else
                      SerialTransport.open(config.uart, config.baud))
         receiver = UdpRcReceiver(config.port)
-        run_loop(receiver, transport, RcState(config.link_timeout_ms), lambda: stopped)
+        state = RcState(config.link_timeout_ms, require_secure=config.mode == "live",
+                        throttle_max=alt_config.throttle_max)
+        state.alt_runtime = runtime
+        run_loop(receiver, transport, state, lambda: stopped or (
+            config.duration is not None and time.monotonic()-started >= config.duration))
     except Exception:
         log.exception("Bridge failed; attempting safe shutdown")
         exit_code = 1
@@ -106,6 +150,10 @@ def main(argv=None):
                 exit_code = 1
         if receiver is not None:
             receiver.close()
+        if source is not None:
+            source.close()
+        if log_writer is not None:
+            log_writer.close()
         for signum, previous in previous_handlers.items():
             signal.signal(signum, previous)
         package_logger.removeHandler(handler)

@@ -1,0 +1,258 @@
+import argparse
+import json
+import socket
+import sys
+import time
+
+from rc_protocol import THROTTLE_MAX, THROTTLE_MIN, clamp, default_rc, sanitize_rc
+from pc.altitude import AltitudeClient
+
+
+SEND_HZ = 30
+STATUS_TIMEOUT_S = 1.0
+DEFAULT_STICK_SPAN = 250
+DEFAULT_DEADZONE = 0.08
+
+
+def load_pygame():
+    try:
+        import pygame
+    except ImportError:
+        print("pygame is required for gamepad input.")
+        print("Install it with: python3 -m pip install pygame")
+        raise SystemExit(1)
+    return pygame
+
+
+def axis_value(joystick, axis, fallback=0.0, deadzone=DEFAULT_DEADZONE):
+    if axis < 0 or axis >= joystick.get_numaxes():
+        return fallback
+    value = joystick.get_axis(axis)
+    if abs(value) < deadzone:
+        return 0.0
+    return value
+
+
+def button_pressed(joystick, button):
+    if button < 0 or button >= joystick.get_numbuttons():
+        return False
+    return joystick.get_button(button) == 1
+
+
+def stick_to_channel(value, center=1500, span=DEFAULT_STICK_SPAN, invert=False):
+    if invert:
+        value = -value
+    return int(clamp(center + value * span, 1000, 2000))
+
+
+def throttle_from_axis(value, invert=False):
+    if invert:
+        value = -value
+    normalized = (value + 1.0) / 2.0
+    return int(clamp(THROTTLE_MIN + normalized * (THROTTLE_MAX - THROTTLE_MIN), THROTTLE_MIN, THROTTLE_MAX))
+
+
+def read_status(sock):
+    latest = None
+    for _ in range(32):
+        try:
+            data, _addr = sock.recvfrom(65535)
+        except BlockingIOError:
+            return latest
+        except OSError:
+            return latest
+
+        try:
+            value = json.loads(data.decode())
+            if isinstance(value, dict):
+                latest = value
+        except Exception:
+            pass
+    return latest
+
+
+def rc_payload(rc, receiver_test=False):
+    cleaned = sanitize_rc(rc, force_throttle_low=not receiver_test)
+    if receiver_test:
+        cleaned["arm"] = False
+        cleaned["receiver_test"] = True
+    return cleaned
+
+
+def send_rc(sock, address, rc, receiver_test=False, altitude=None):
+    data = rc_payload(rc, receiver_test=receiver_test)
+    payload = json.dumps(altitude.decorate(data) if altitude else data).encode("utf-8")
+    sock.sendto(payload, address)
+
+
+def print_overview(joystick, stick_span, deadzone, receiver_test):
+    print("Controller:", joystick.get_name())
+    print("Axes:", joystick.get_numaxes(), "Buttons:", joystick.get_numbuttons())
+    print("Default mapping: left X=roll axis0, left Y=pitch axis1, right X=yaw axis2")
+    print("Buttons: throttle up button5, throttle down button4, arm button7, angle button6, panic button1")
+    print("Stick span: +/-{}us, deadzone: {}".format(stick_span, deadzone))
+    if receiver_test:
+        print("Receiver test mode: throttle can move while AUX arm is forced OFF.")
+    print("Press Ctrl+C to stop. Stop sends disarm/throttle-low packets.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Gamepad UDP controller for Pico W drone.")
+    parser.add_argument("--ip", required=True, help="Pico W IP address")
+    parser.add_argument("--port", type=int, default=5005, help="Pico UDP port")
+    parser.add_argument("--index", type=int, default=0, help="Gamepad index")
+    parser.add_argument("--roll-axis", type=int, default=0)
+    parser.add_argument("--pitch-axis", type=int, default=1)
+    parser.add_argument("--yaw-axis", type=int, default=2)
+    parser.add_argument("--throttle-axis", type=int, default=-1)
+    parser.add_argument("--invert-roll", action="store_true")
+    parser.add_argument("--invert-pitch", action="store_true")
+    parser.add_argument("--invert-yaw", action="store_true")
+    parser.add_argument("--invert-throttle", action="store_true")
+    parser.add_argument("--stick-span", type=int, default=DEFAULT_STICK_SPAN)
+    parser.add_argument("--deadzone", type=float, default=DEFAULT_DEADZONE)
+    parser.add_argument(
+        "--receiver-test",
+        action="store_true",
+        help="Force AUX arm off while allowing throttle channel movement for Betaflight Receiver checks.",
+    )
+    parser.add_argument("--arm-button", type=int, default=7)
+    parser.add_argument("--angle-button", type=int, default=6)
+    parser.add_argument("--panic-button", type=int, default=1)
+    parser.add_argument("--throttle-up-button", type=int, default=5)
+    parser.add_argument("--throttle-down-button", type=int, default=4)
+    parser.add_argument("--altitude", action="store_true")
+    parser.add_argument("--alt-hold-button", type=int, default=-1)
+    parser.add_argument("--alt-up-button", type=int, default=-1)
+    parser.add_argument("--alt-down-button", type=int, default=-1)
+    args = parser.parse_args()
+    alt_buttons = [args.alt_hold_button, args.alt_up_button, args.alt_down_button]
+    used = [b for b in alt_buttons if b >= 0]
+    existing = [args.arm_button, args.angle_button, args.panic_button,
+                args.throttle_up_button, args.throttle_down_button]
+    if len(set(used)) != len(used) or any(b in existing for b in used):
+        parser.error("altitude buttons must be distinct and not overlap existing controls")
+    altitude = AltitudeClient() if args.altitude else None
+    alt_previous = [False]*3
+    next_alt_display = 0.0
+
+    pygame = load_pygame()
+    pygame.init()
+    pygame.joystick.init()
+
+    if pygame.joystick.get_count() <= args.index:
+        print("No gamepad found at index", args.index)
+        raise SystemExit(1)
+
+    joystick = pygame.joystick.Joystick(args.index)
+    joystick.init()
+    print_overview(joystick, args.stick_span, args.deadzone, args.receiver_test)
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setblocking(False)
+    address = (args.ip, args.port)
+
+    rc = default_rc()
+    last_status = None
+    last_status_at = 0.0
+    prev_arm_pressed = False
+    prev_angle_pressed = False
+    period = 1.0 / SEND_HZ
+
+    try:
+        while True:
+            pygame.event.pump()
+            if altitude:
+                pressed = [button_pressed(joystick, b) for b in alt_buttons]
+                if pressed[0] and not alt_previous[0]:
+                    altitude.hold = not altitude.hold
+                for index, delta in ((1, .02), (2, -.02)):
+                    if pressed[index] and not alt_previous[index]:
+                        altitude.step(delta)
+                alt_previous = pressed
+
+            arm_pressed = button_pressed(joystick, args.arm_button)
+            angle_pressed = button_pressed(joystick, args.angle_button)
+            if arm_pressed and not prev_arm_pressed:
+                rc["arm"] = not rc["arm"]
+            if angle_pressed and not prev_angle_pressed:
+                rc["angle"] = not rc["angle"]
+            prev_arm_pressed = arm_pressed
+            prev_angle_pressed = angle_pressed
+            if args.receiver_test:
+                rc["arm"] = False
+
+            if button_pressed(joystick, args.panic_button):
+                rc = default_rc()
+            else:
+                rc["roll"] = stick_to_channel(
+                    axis_value(joystick, args.roll_axis, deadzone=args.deadzone),
+                    span=args.stick_span,
+                    invert=args.invert_roll,
+                )
+                rc["pitch"] = stick_to_channel(
+                    axis_value(joystick, args.pitch_axis, deadzone=args.deadzone),
+                    span=args.stick_span,
+                    invert=not args.invert_pitch,
+                )
+                rc["yaw"] = stick_to_channel(
+                    axis_value(joystick, args.yaw_axis, deadzone=args.deadzone),
+                    span=args.stick_span,
+                    invert=args.invert_yaw,
+                )
+                if args.throttle_axis >= 0:
+                    rc["throttle"] = throttle_from_axis(
+                        axis_value(joystick, args.throttle_axis, fallback=-1.0, deadzone=args.deadzone),
+                        invert=args.invert_throttle,
+                    )
+                else:
+                    if button_pressed(joystick, args.throttle_up_button):
+                        rc["throttle"] = clamp(rc["throttle"] + 2, THROTTLE_MIN, THROTTLE_MAX)
+                    if button_pressed(joystick, args.throttle_down_button):
+                        rc["throttle"] = clamp(rc["throttle"] - 4, THROTTLE_MIN, THROTTLE_MAX)
+
+            send_rc(sock, address, rc, receiver_test=args.receiver_test, altitude=altitude)
+
+            status = read_status(sock)
+            if status is not None:
+                last_status = status
+                last_status_at = time.time()
+                if altitude:
+                    altitude.receive(status)
+
+            link = "NO ACK"
+            if last_status is not None and time.time() - last_status_at < STATUS_TIMEOUT_S:
+                link = "ACK packets={} age={}ms".format(
+                    last_status.get("packets", "?"),
+                    last_status.get("link_age_ms", "?"),
+                )
+
+            displayed = rc_payload(rc, receiver_test=args.receiver_test)
+            line = (
+                "roll={roll:4d} pitch={pitch:4d} thr={throttle:4d} yaw={yaw:4d} "
+                "arm={arm} angle={angle} | {link}"
+            ).format(link=link, **displayed)
+            if altitude:
+                # Separate lines retain fault text instead of truncating it at 120 columns.
+                if time.monotonic() >= next_alt_display:
+                    sys.stdout.write("\n" + line + "\n" + "\n".join(altitude.lines()))
+                    next_alt_display = time.monotonic()+.2
+            else:
+                sys.stdout.write("\r" + line[:120])
+            sys.stdout.flush()
+            time.sleep(period)
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        safe = default_rc()
+        for _ in range(10):
+            send_rc(sock, address, safe, altitude=altitude)
+            time.sleep(period)
+        sock.close()
+        pygame.quit()
+        print("\nStopped. Disarm packets sent.")
+
+
+if __name__ == "__main__":
+    main()

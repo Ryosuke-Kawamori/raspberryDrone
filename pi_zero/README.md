@@ -1,8 +1,30 @@
 # Raspberry Pi Zero W UDP → CRSF
 
+BMP581 / VL53L4CDの高度維持を追加しました。
+**既定起動はUARTを開かないdry-runです。** UART手動ブリッジは`--mode manual`を明示してください。
+センサー配線、実行モード、設定単位、校正、調整、FC failsafe検証は
+[高度維持ガイド](ALTITUDE.md)を参照してください。未検証設定ではliveを起動できません。
+
 既存PC UI → Wi-Fi / UDP → Pi Zero W → GPIO UART / CRSF → Meteor85 FC。
-Pico W用ファイルとPC UIは変更しません。通常のCPython 3.11以降を使います。
+Pico W用ファイルは維持し、PC UIはオプションで高度表示・操作に対応します。CPython 3.11以降を使います。
 リポジトリ直下の `crsf.py` と `rc_protocol.py` はMicroPython依存がないため、そのまま共有します。
+
+## 初めてセットアップする場合
+
+対象は **Raspberry Pi Zero W（Pi Zero W）** です。microSDへRaspberry Pi OSを入れ、
+通常のPythonで起動します。Pico W用のUF2、MicroPython、Thonny、`wifi_config.py` は使用しません。
+
+次の順番で進めてください。初回のdry-runまではFCやセンサーの接続は不要です。
+
+1. [OS・Wi-Fi・SSHとPython環境を準備](#osとpythonの準備sta方式)する。
+2. dry-runで起動し、PC UIからのUDPとACKを確認する。
+3. [UARTとPL011](#uartとpl011)を設定する。
+4. [FCへ配線し、Receiverタブで確認](#配線とreceiver確認)する。
+5. 手動動作と安全停止の確認後に[自動起動](#systemd)を設定する。
+
+準備するもの：Pi Zero W、microSDカードとカードリーダー、安定した5V USB電源とケーブル、
+Wi-Fi接続できるPC。FC接続時には配線材と、必要に応じてはんだ付け用品を用意します。
+最初は既存Wi-FiへのSTA接続で進めます。AP化と高度センサーの設定は後から追加できます。
 
 ## 動作と安全状態
 
@@ -29,7 +51,8 @@ ARM切り替え時にThrottleが高ければロックへ戻ります。
 このモードはARMロックを解除しません。通常のDisarmはThrottleも1000へ戻します。
 JSONの数値フィールドは数値、真偽値フィールドはJSON booleanを使います。
 不正JSON・非オブジェクト・不正な型・NaN/InfinityのRC値は安全状態に戻します。
-既存の `rc_protocol.py` のThrottle上限がローカルで変更されていても、Pi側の上限1200は維持します。
+既存の `rc_protocol.py` のThrottle上限が変更されていても、Pi側の既定上限1200は維持します。
+高度設定ファイルによる明示的な変更だけを許可します。手動ホバー実測がない設定ではliveを拒否します。
 
 ACKは200msごとに最後の正常送信元へ返します。
 `{"type":"pico_status","packets":1,"link_age_ms":0,"rc":{...},"arm_ready":true}`
@@ -45,17 +68,69 @@ UDPは認証・シーケンス番号を持たない既存形式です。信頼�
 
 ## OSとPythonの準備（STA方式）
 
-1. Raspberry Pi Imagerで **Zero W対応のRaspberry Pi OS Lite (32-bit)** を書き込みます。
-   ユーザー名、ホスト名（例 `raspberrydrone`）、SSH、Wi-Fi国設定と既存2.4GHz Wi-Fiを設定します。
-2. PiとPCを同じLANへ接続します。標準構成ではAP設定を変更しません。
-3. SSHまたはローカル端末から以下を実行します。Pythonが3.11以上であることを確認してください。
+### OSの書き込みとSSH接続
+
+PCのRaspberry Pi Imagerで機種をPi Zero Wに設定し、**Zero W対応のRaspberry Pi OS Lite (32-bit)**
+をmicroSDへ書き込みます。書き込み前のカスタマイズで以下を設定します。
+
+|項目|設定例|
+|---|---|
+|ホスト名|`raspberrydrone`|
+|ユーザー名・パスワード|自分で設定（以下の `<USER>` に使用）|
+|SSH|有効（パスワード認証または自分の公開鍵を設定）|
+|Wi-Fi|既存の2.4GHz Wi-FiのSSID・パスワード|
+|Wi-Fiの国|実際の使用国（日本ならJP）|
+
+microSDをPiへ挿入して給電し、起動を待ちます。PCも同じLANへ接続します。
+**PCのPowerShellまたはターミナル**から接続してください。
+
+```powershell
+ssh <USER>@raspberrydrone.local
+```
+
+`<USER>` は設定したユーザー名へ置き換えます。初回接続時は接続先を確認してホスト鍵を登録します。
+名前で接続できない場合は、ルーターのDHCPリース一覧でPiのIPを確認し、
+`ssh <USER>@<PI_ZERO_IP>` を使います。詳しくは[IPの確認方法](#pcからipを確認)を参照してください。
+
+### Pythonとコードの配置
+
+以下は **SSH接続したPi上**で実行します。Pythonが3.11以上であることを確認してください。
 
 ```bash
 sudo apt update
 sudo apt install -y git python3 python3-venv
 python3 --version
+```
+
+GitHubへ必要なコードがpush済みなら、Pi上で取得します。
+
+```bash
 git clone https://github.com/Ryosuke-Kawamori/raspberryDrone.git
 cd raspberryDrone
+```
+
+別ブランチで作業している場合は、そのブランチをチェックアウトしてください。
+**PC上の未commit・未pushの変更や追加ファイルは、cloneだけではPiへ入りません。**
+その場合はPCのリポジトリ直下から、必要なコードをSSH経由で転送できます。
+以下は新しい配置先 `~/raspberryDrone` を作る例です。既に同名ファイルがある場合は上書きされるので、
+Pi側で編集している場合は別の配置先を使ってください。
+
+```powershell
+ssh <USER>@raspberrydrone.local "mkdir -p ~/raspberryDrone"
+scp -r pi_zero crsf.py rc_protocol.py <USER>@raspberrydrone.local:~/raspberryDrone/
+```
+
+`pi_zero/` は現在の高度関連モジュールも含めてディレクトリごと転送します。
+PC UIはPC上で実行するため、この転送例には含めません。Windows用の `.venv` は転送せず、
+**Pi上**で新しいvenvを作ります。
+
+PC UIの実装は [`pc/`](../pc/README.md) にあります。PCへコードをコピーして配置する場合は、
+ルートの `pc_*.py` だけでなく `pc/` と `rc_protocol.py` も含めてください。
+ルートの `pc_*.py` は従来コマンド用の互換ランチャーです。
+
+```bash
+cd ~/raspberryDrone
+ls pi_zero/main.py crsf.py rc_protocol.py
 python3 -m venv .venv
 .venv/bin/python -m pip install -r pi_zero/requirements.txt
 .venv/bin/python -m pi_zero.main --dry-run
@@ -64,6 +139,20 @@ python3 -m venv .venv
 すべての起動コマンドはリポジトリ直下で実行します。`python pi_zero/main.py` ではなく
 `python -m pi_zero.main` を使います。dry-runではpyserialのインポートもUART openもせず、
 RC値とCRSFフレームの16進表現を1秒に1回ログ出力します。Ctrl+Cで終了できます。
+
+### FCなしでUDP通信を確認
+
+Piでdry-runを起動したまま、別のSSH端末で `hostname -I` を実行してWi-Fi側のIPを確認します。
+**PC側のリポジトリ直下**で、ゲームパッドを接続して以下を実行します。
+
+```powershell
+python -m pip install pygame
+python pc_gamepad_ui.py --ip <PI_ZERO_IP> --receiver-test
+```
+
+PCに `ACK packets=...` が表示され、Piのログに操作値が反映されればUDP通信の確認は完了です。
+dry-runではFCへ何も送信しません。この確認にはゲームパッドを使います。
+ゲームパッドがない場合は、後述のキーボードUIで送信し、Pi側のログで受信値を確認できます。
 
 ## UARTとPL011
 
@@ -80,6 +169,9 @@ Interface Options → Serial Portで、serial login shellは **No**、serial har
 OS世代によって起動設定は `/boot/firmware/config.txt` または `/boot/config.txt` です。
 実際のファイルをバックアップして編集し、有効な `[all]` セクションへ以下を設定します。
 重複するUART/Bluetooth overlayは整理してください。
+
+通常の編集コマンドは `sudo nano /boot/firmware/config.txt` です。
+旧OSでは `sudo nano /boot/config.txt` を使い、実際に起動に使用されるファイルを編集します。
 
 ```ini
 enable_uart=1
@@ -138,6 +230,8 @@ sudo usermod -aG dialout "$(id -un)"
 
 UARTは **3.3Vロジック**です。5VをTX/RX端子に接続しないでください。
 Pi用電源とFC用電源を適切に用意し、GNDを共通化します。RX接続は不要で、今回はテレメトリ受信は実装していません。
+FC側のRX/TXパッドはMeteor85に搭載された基板の型番・配線図で確認してください。
+Pico W用のGP0/GP1配線とは異なります。
 
 1. Betaflightで使用UARTのSerial RXを有効にし、受信方式をSerial、プロトコルをCRSF、
    チャンネルマップをAETR1234に設定します。既存内蔵受信機との競合を避けてください。
@@ -145,8 +239,12 @@ Pi用電源とFC用電源を適切に用意し、GNDを共通化します。RX�
 3. Piで実UART出力を開始します。
 
 ```bash
-.venv/bin/python -m pi_zero.main --uart /dev/serial0 --baud 420000 --port 5005 --link-timeout-ms 500
+.venv/bin/python -m pi_zero.main --mode manual --uart /dev/serial0 --baud 420000 --port 5005 --link-timeout-ms 500
 ```
+
+420000 baud、8N1、50Hz、UDP 5005、timeout 500msは既定値です。
+短く起動する場合は `.venv/bin/python -m pi_zero.main --mode manual` でも同じ設定になります。
+**`--uart` だけでは実UART出力に切り替わりません。`--mode manual` を明示してください。**
 
 4. PCでゲームパッド用依存を用意し、receiver-testで起動します。
 
@@ -167,7 +265,7 @@ python pc_keyboard_ui.py --ip <PI_ZERO_IP>
 ```
 
 通常操作の初期状態はARM OFF・Throttle最小です。ARM操作前にその状態をPiへ送信してください。
-キーボードUIをWindowsで使う場合、既存の `curses` 用環境も必要です。
+キーボードUIをWindowsで使う場合は、PCで `python -m pip install windows-curses` を実行します。
 
 ## PCからIPを確認
 
@@ -191,7 +289,9 @@ sudoedit /etc/systemd/system/raspberry-drone.service
 `REPLACE_WITH_USER` を実行ユーザー名に、`/REPLACE_WITH_ABSOLUTE_REPO_PATH` の2箇所を
 実際のリポジトリ絶対パス（`pwd` で確認）に置き換えます。
 `ExecStart` のvenvもそのパスの `.venv/bin/python` を指すようにします。
-空白のない配置先を推奨します。必要なら実機確認前の `ExecStart` 末尾に `--dry-run` を付けます。
+空白のない配置先を推奨します。テンプレートは既定のdry-runで起動します。
+手動UARTブリッジとして自動起動する場合は、動作確認後に `ExecStart` の末尾へ
+`--mode manual` を追加してください。明示的に非駆動で確認する場合は `--dry-run` を付けます。
 
 ```bash
 sudo systemd-analyze verify /etc/systemd/system/raspberry-drone.service
@@ -299,5 +399,6 @@ NetworkManager方式のOSで提供される別のAP設定方法は
 SIGINT/SIGTERM、例外時の安全送信を検証します。実機の電気特性やLinuxの周期精度は別途測定してください。
 
 `UdpRcReceiver` が入力、`RcState` が安全状態、`SerialTransport` がCRSF出力を担当します。
-センサーや自動操縦は今後独立した入力/制御層として追加し、最終出力前に同じ安全制約を通してください。
-BMP581、VL53L4CD、カメラ、高度維持PID、映像認識は今回実装していません。
+高度推定・制御は独立した層とし、最終出力前に同じ通信・DISARM制約を通しています。
+BMP581、VL53L4CD、高度維持PD/PIDは[高度維持ガイド](ALTITUDE.md)を参照してください。
+カメラ、映像認識、自動離着陸、水平位置保持は実装していません。

@@ -3,16 +3,66 @@
 Raspberry Pi Zero W can also replace the Pico W without changing the PC UIs.
 See [Pi Zero W setup, safety behavior, and tests](pi_zero/README.md).
 
-Minimal split:
+Pi Zero Wを初めて使う場合は、[初期セットアップ手順](pi_zero/README.md#初めてセットアップする場合)を参照してください。
+OS・Wi-Fi・SSH、未pushコードの転送、dry-run、UART設定、FC配線、自動起動の順に説明しています。
+Pi Zero WではmicroSD上のRaspberry Pi OSを使用します。下記のPico W用MicroPython手順とは異なります。
 
-- `pc_keyboard_ui.py`: PC keyboard UI. Sends RC commands to Pico W over UDP.
-- `pc_gamepad_ui.py`: PC gamepad UI. Sends RC commands and shows Pico ACK/status.
-- `pc_gamepad_probe.py`: Shows gamepad axis/button numbers for mapping.
-- `pc_hid_probe.py`: Raw HID probe for controllers that pygame/SDL cannot see.
-- `picomain.py`: Pico W entry point. Receives UDP commands and sends CRSF RC frames to FC.
-- `pico_udp.py`: Pico WiFi/UDP receiver.
-- `crsf.py`: CRSF frame packing and UART sender.
-- `rc_protocol.py`: Shared RC command defaults, clamps, and channel mapping.
+BMP581 / VL53L4CDによる実験的な高度維持を追加しました。既定起動は非駆動です。
+実行モード・配線確認・校正・検証手順は[高度維持ガイド](pi_zero/ALTITUDE.md)を参照してください。
+同梱設定ではliveは無効です。
+
+## Directory structure
+
+```text
+raspberryDrone/
+├── pc/                         # PC操作・入力デバイス確認の実装
+│   ├── README.md
+│   ├── keyboard_ui.py
+│   ├── gamepad_ui.py
+│   ├── gamepad_probe.py
+│   ├── hid_probe.py
+│   └── altitude.py
+├── pi_zero/                    # Raspberry Pi Zero W用CPython実装
+│   ├── README.md               # 初期設定・UART・配線・自動起動
+│   ├── ALTITUDE.md             # 高度維持の設定と検証
+│   ├── main.py / config.py
+│   ├── udp_receiver.py / serial_transport.py
+│   ├── alt_config.py / alt_control.py / alt_runtime.py
+│   ├── sensors.py / estimation.py / experiments.py
+│   ├── altitude.example.json
+│   ├── requirements.txt / requirements-sensors.txt
+│   ├── raspberry-drone.service
+│   └── tests/                  # ブリッジ・高度制御の自動テスト
+├── examples/                   # 手動で実行する確認スクリプト
+│   ├── README.md               # 旧ファイル名との対応と実行方法
+│   ├── pico_w/                 # Pico Wで動かすUART・モーター確認
+│   └── udp/send_rc.py           # PCから固定RC値を送信
+├── tests/                      # PC起動方法・互換性の自動テスト
+├── pytest.ini                  # 実機用examplesを自動収集しない設定
+├── picomain.py                 # Pico Wへmain.pyとしてコピー
+├── pico_udp.py                 # Pico WのWi-Fi・UDP受信
+├── wifi_config.example.py      # Pico W用Wi-Fi設定テンプレート
+├── crsf.py                     # Pico / Pi共通のCRSF生成
+├── rc_protocol.py              # PC / Pico / Pi共通のRCプロトコル
+└── pc_*.py                     # 既存コマンド・importを維持する互換ファイル
+```
+
+PC側の変更は[pc/](pc/README.md)、Pi Zero W側の変更は[pi_zero/](pi_zero/README.md)で行います。
+ルートの `pc_*.py` は互換用で、実装は `pc/` に集約しています。
+Pico Wへファイルを直接コピーする既存の運用とMicroPythonのimportを維持するため、
+Pico W起動コードと共通モジュールはルートに残しています。
+仮想環境・キャッシュ・ローカル調査用ファイルは上記の構成に含めません。
+
+リポジトリ直下から、新しいモジュール形式でも起動できます。
+
+```bash
+python -m pc.keyboard_ui --ip <DEVICE_IP>
+python -m pc.gamepad_ui --ip <DEVICE_IP> --receiver-test
+python -m pi_zero.main --dry-run
+python -m pytest
+```
+
+自動テストには `python -m pip install pytest` が必要です。従来のPC起動コマンドも引き続き使えます。
 
 ## Pico W Setup
 
