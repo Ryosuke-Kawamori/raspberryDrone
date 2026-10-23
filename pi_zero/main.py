@@ -13,6 +13,20 @@ from rc_protocol import default_rc
 logger = logging.getLogger("pi_zero.main")
 
 
+def altitude_summary(status, uart_enabled):
+    def value(key, suffix=""):
+        number = status.get(key)
+        return "--" if number is None else f"{number:.3f}{suffix}"
+    return (f"ALT {status.get('mode', '?')} {status.get('state', '?')} "
+            f"UART={'ON' if uart_enabled else 'OFF'} | "
+            f"height={value('height_m', 'm')} target={value('target_m', 'm')} "
+            f"vz={value('velocity_m_s', 'm/s')} | "
+            f"throttle manual={value('manual_throttle')} AUTO={value('auto_throttle')} "
+            f"bridge_out={value('output_throttle')} | "
+            f"quality={status.get('quality', '?')} age={value('age_s', 's')} "
+            f"fault={status.get('fault') or 'none'}")
+
+
 def shutdown(transport, clock=time.monotonic, sleep=time.sleep):
     """Attempt all 50 safe frames even if individual UART writes fail."""
     errors = 0
@@ -33,6 +47,7 @@ def run_loop(receiver, transport, state, should_stop,
     transport.send(default_rc())
     next_send = clock() + RC_PERIOD_S
     next_status = clock() + STATUS_PERIOD_S
+    next_alt_display = clock()
     while not should_stop():
         receiver.poll(state, clock)
         now = clock()
@@ -51,6 +66,10 @@ def run_loop(receiver, transport, state, should_stop,
             status = state.status(now, receiver.packet_count)
             if getattr(state, "alt_runtime", None):
                 status["altitude"] = state.alt_runtime.status
+                if now >= next_alt_display:
+                    logger.info("%s", altitude_summary(status["altitude"],
+                                                      not isinstance(transport, DryRunTransport)))
+                    next_alt_display = now+.5
             receiver.send_status(status)
             next_status = now + STATUS_PERIOD_S
         sleep(max(0.0, min(0.001, next_send - clock())))

@@ -125,6 +125,9 @@ python pc_gamepad_ui.py --ip 192.168.4.1 --altitude --alt-hold-button 0 --detail
 PCの`thr manual/auto/out`の**autoが計算上のThrottle**です。outはshadowの手動値で、
 この起動ではUART送信自体がありません。基準1150・静止・高度誤差+0.1mならP項は+10、
 計算は約1160です（LPF・D項・変化率制限の影響があります）。
+Piの端末でも約0.5秒ごとの`ALT shadow ... UART=OFF`行に現在高度`height`、目標高度`target`、
+計算Throttle`AUTO`、手動値`manual`、ブリッジ出力`bridge_out`、品質・fault理由を表示します。
+`dry-run rc=...`行は手動ブリッジ出力で、計算Throttleではありません。
 ON時の現在高度が目標で、飛行可能なThrottleを推定する機能ではありません。
 急に動かす、測距範囲を外す、同じ測定値が10秒続く場合などはFAULTになります。
 再試行はARM OFF→Throttle=1000→ARM ON→hold OFF→ONです。
