@@ -326,3 +326,71 @@ def test_noise_delay_saturation_simulation_and_replay(tmp_path):
     assert any(abs(row["pid"]["p"]) > 0 for row in rows)
     with pytest.raises(ValueError):
         replay(AltConfig(), log, log)
+
+
+def test_bmp_conversion_arriving_during_data_read_is_not_published_twice():
+    class Device:
+        kIntAssertedDrdy = 1
+        ready = 1
+        def get_interrupt_status(self):
+            result, self.ready = self.ready, 0
+            return result
+        def get_sensor_data(self):
+            self.ready = 1  # conversion completed after the first status read
+            return SimpleNamespace(pressure=101325, temperature=20)
+    sensor = BMP581(Device(), lambda: 1)
+    assert sensor.read().valid
+    assert sensor.read() is None
+
+
+@pytest.mark.parametrize("baro_fault", ["stale", "invalid", "future"])
+def test_blend_rechecks_barometer_between_tof_measurements(baro_fault):
+    est = Estimator(replace(AltConfig(), estimator_mode="comparison-blend"))
+    est.p0, est.t0_k = 101325, 293.15
+    est.update(Sample("bmp", 1, 0, {"pressure_pa": 101325, "temperature_c": 20}), 0)
+    est.update(tof(.15), .15)
+    assert est.snapshot(.15)["valid"]
+    if baro_fault != "stale":
+        est.update(Sample("bmp", 2, .16 if baro_fault == "invalid" else 1,
+                          {}, False if baro_fault == "invalid" else True), .16)
+    snapshot = est.snapshot(.21)
+    assert snapshot["age_s"] < est.c.stale_s  # ToF is still fresh
+    assert not snapshot["valid"] and not snapshot["qualified"]
+    assert not snapshot["baro_valid"]
+
+
+@pytest.mark.parametrize("policy", ["bench-disarm", "manual-recover"])
+def test_manual_throttle_is_current_between_control_ticks(policy):
+    config = replace(AltConfig(), control_period_s=.08, loss_policy=policy)
+    state = RcState()
+    state.expired, state.rc = False, armed(1100)
+    runtime = AltRuntime(config, "live", SimpleNamespace(drain=lambda: []), MemoryLog())
+    assert runtime.tick(0, state)["throttle"] == 1100
+    state.rc = armed(1160)
+    assert runtime.tick(.02, state)["throttle"] == 1160
+    state.rc = default_rc()
+    assert runtime.tick(.04, state) == default_rc()
+
+
+def test_transmitted_frames_are_logged_with_independent_control_period():
+    clock, serial, log = FakeClock(), FakeSerial(), MemoryLog()
+    serial.clock = clock
+    state = RcState()
+    state.expired, state.rc, state.last_packet_at = False, armed(), 0
+    state.alt_runtime = AltRuntime(replace(AltConfig(), control_period_s=.08), "shadow",
+                                   SimpleNamespace(drain=lambda: []), log)
+    receiver = SimpleNamespace(packet_count=0, poll=lambda *_: None, send_status=lambda *_: None)
+    run_loop(receiver, SerialTransport(serial), state, lambda: clock() >= .2, clock, clock.sleep)
+    sends = [row for row in log.rows if row["type"] == "crsf_send"]
+    ticks = [row for row in log.rows if row["type"] == "tick"]
+    assert len(sends) == len(serial.writes)-1  # initial DISARM precedes the loop
+    assert len(sends) > len(ticks)
+    for row, (_, frame) in zip(sends, serial.writes[1:]):
+        assert unpack(frame)[2] == round((row["output_rc"]["throttle"]-1000)*1.6+192)
+
+
+@pytest.mark.parametrize("kw", [{"kp": True}, {"tof_budget_ms": 20.5},
+                                  {"throttle_max": True}, {"verification_notes": 123}])
+def test_config_rejects_wrong_types_before_hardware_opens(kw):
+    with pytest.raises(ValueError):
+        AltConfig(**kw)

@@ -41,6 +41,8 @@ def run_loop(receiver, transport, state, should_stop,
             runtime = getattr(state, "alt_runtime", None)
             output = runtime.tick(now, state, max(0.0, now-next_send)) if runtime else state.rc.copy()
             transport.send(output)
+            if runtime:
+                runtime.record_send(clock(), output, max(0.0, now-next_send))
             next_send += RC_PERIOD_S
             if next_send <= clock():
                 # Do not burst old frames after a scheduler/IO delay.

@@ -145,13 +145,23 @@ class Estimator:
     def snapshot(self, now):
         age = now-self.at if self.at is not None else None
         valid = not self.error and age is not None and 0 <= age <= self.c.stale_s
+        baro_age = None if self.baro_at is None else now-self.baro_at
+        baro_valid = (not self.baro_error and baro_age is not None
+                      and 0 <= baro_age <= self.c.stale_s)
+        quality = "good" if valid else (self.error or "ToF stale")
+        # A blended estimate depends on BOTH inputs even between ToF conversions.
+        if self.c.estimator_mode == "comparison-blend" and not baro_valid:
+            valid, quality = False, "comparison blend requires fresh valid barometer"
         if not valid:
             self.good_since = None
         return {"height_m": self.height, "velocity_m_s": self.velocity, "age_s": age,
-                "valid": valid, "quality": "good" if valid else (self.error or "ToF stale"),
+                "valid": valid, "quality": quality,
                 "qualified": valid and self.good_since is not None and now-self.good_since >= self.c.qualify_s,
-                "baro_height_m": self.baro_height, "baro_age_s": None if self.baro_at is None else now-self.baro_at,
-                "baro_error": self.baro_error, "p0_pa": self.p0, "tilt": self.tilt,
+                "baro_height_m": self.baro_height, "baro_age_s": baro_age,
+                "baro_valid": baro_valid,
+                "baro_error": self.baro_error or ("" if baro_valid else "barometer stale/uncalibrated"),
+                "floor_distance_m": self.last_distance,
+                "p0_pa": self.p0, "tilt": self.tilt,
                 "height_filter_delay_s": self.c.height_tau_s,
                 "velocity_filter_delay_s": self.c.height_tau_s+self.c.velocity_tau_s,
                 "blend_bias_m": self.bias}

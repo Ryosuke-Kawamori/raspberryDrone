@@ -22,3 +22,19 @@
 
 Pi Zero Wのセットアップは[Pi Zeroガイド](../pi_zero/README.md)、
 高度表示・操作は[高度維持ガイド](../pi_zero/ALTITUDE.md)を参照してください。
+
+送信指令を詳しく確認するには`--details`を付けます。従来の1行表示は引き続き既定です。
+
+```bash
+python -m pc.gamepad_ui --ip <IP> --details
+# プロペラを外してReceiver表示と比較する場合
+python -m pc.gamepad_ui --ip <IP> --receiver-test --details
+```
+
+詳細表示は200msごとに、CH1〜6、ARM/ANGLE、操作中と実送信のThrottle、
+全軸の生値、押下ボタン番号、送信JSON、ACKの経過時間と受信側RCを追記します。
+送信自体は従来の30Hzです。DISARM時などのThrottle補正も送信後の値で確認できます。
+`--altitude`と併用すると高度維持要求・目標offset・高度状態も表示します。
+ACKが1秒以上届かない場合は受信側の値を現在値として表示しません。
+Pi側のThrottle制限や高度補正で送信値と受信側出力が異なる場合があります。
+ACKはブリッジの報告であり、FCが受理したことを保証するものではありません。

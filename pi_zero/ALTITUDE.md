@@ -26,11 +26,13 @@ UART書込timeoutは20ms。遅れたフレームを一斉送信せず、loop遅�
 
 ## 採用ドライバーと配線確認
 
-2026-09-25に公式API・ソースと配布バージョンを確認しました。Pi実機での動作は未確認です。
+2026-10-23に公式API・ソースを再確認し、BMP581はPyPIの2.0.0配布wheelとも照合しました。
+Pi実機での動作は未確認です。
 
 - [SparkFun Qwiic BMP581 2.0.0](https://github.com/sparkfun/qwiic_bmp581_py/blob/master/qwiic_bmp581.py)：
   `begin`, `set_odr_frequency`, `int_source_select`, `get_interrupt_status`, `get_sensor_data`を使用。
   DRDYの読取・クリアを経た新規変換だけを公開します。気圧はPa。
+  データ読取後にもDRDYを消費します。読取中に完了した変換は二重計上を避けるため捨てる場合があり、全変換の保存は保証しません。
   Qwiic Linux backendの自動bus選択を避け、明示busのSMBus adapterを渡します。
   2.0.0のunsigned温度デコードへ24bit signed Q16補正を施しています。
   [Boschデータシート](https://cdn.sparkfun.com/assets/9/a/4/4/f/BMP581-Datasheet.pdf)も参照してください。
@@ -122,7 +124,10 @@ ToFが取付高付近で連続安定し、気圧spanも制限内であること�
 
 `comparison-blend`はmonitor/replay/shadow用の交換可能な実験モードです。
 両方が有効な最初の時点で固定biasを取り、`(1-w)*ToF+w*(baro+bias)`（既定w=0.1）を計算します。
-両方の品質・鮮度と差0.3m以内を要求します。biasを飛行中に追従更新せず、床変化や気圧ドリフトは補償できません。
+両方の品質・鮮度と差0.3m以内を要求します。ToF更新の間にもBMPの鮮度・エラーを再確認し、
+無効なら融合高度も無効です。`baro_valid`で比較用気圧高度の有効性を確認してください。
+`floor_distance_m`は最後に受理した傾き補正後の床距離で、鮮度は`age_s`と`valid`を併せて確認します。
+biasを飛行中に追従更新せず、床変化や気圧ドリフトは補償できません。
 片方の喪失時の継続やlive利用は禁止しています。
 
 ## 制御・設定単位
@@ -155,6 +160,7 @@ ONはARM済み、品質継続、範囲内、低速度、OFFを経た新しい操
 現在高度をcaptureし最初の出力を現在手動Throttleと一致させます。ARM自体は手動です。
 目標変更はcaptureに対するoffset差で、同一パケット再送で重複加算しません。
 通常OFFではMANUALへ移り、直前自動値から最新の手動Throttleへslewで近づきます。
+通常のMANUAL中と`manual-recover`による返却後は、制御周期の間でも最新の手動RCを送信します。
 `releasing=true`の間は新しいONを拒否します。手動値も自動値に近づけておいてください。
 緊急DISARM/通信failsafeには平滑化・slewを掛けません。
 絶対出力、補正幅、slewで飽和する方向への積分を止めるanti-windupと積分上限があります。
@@ -208,6 +214,8 @@ JSONL settings行に設定、壁時計とmonotonic対応を保存します。
 tick行は測定生値（単位付きキー）、seq/時刻/valid/error/status/取得時間、推定高度/速度、
 target、P/I/D、制限上下限とlimited、manual/auto/output、RC、状態/遷移、fault、dt、loop遅延です。
 不正なNaN/Infinityはnullで保存しinvalidを維持します。保存欠落数/エラーはstatusにも載ります。
+`crsf_send`行は制御周期と独立した各UART書込成功時の実出力RC・時刻・loop遅延を記録します。
+FCの受理確認ではありません。起動時の最初のDISARMと終了時の安全フレームはこの行の対象外です。
 欠落区間の完全再現はできません。replayはUARTを開かずshadow計算します。
 既定ではログのsettingsを使い、`--alt-config`指定時だけ設定を上書きして比較します。
 simulationのゲイン・1400ホバー・一次元推力モデルは架空です。固定seed、距離ノイズ、60ms配送遅延、

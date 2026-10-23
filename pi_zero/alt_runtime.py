@@ -141,7 +141,10 @@ class AltRuntime:
             # Manual release and disarm cannot wait for the control deadline.
             if not (self.controller.state == "ALT_HOLD" and not state.hold):
                 result = state.rc.copy()
-                if self.mode == "live":
+                if self.mode == "live" and (self.controller.state == "ALT_HOLD"
+                                             or self.controller.releasing
+                                             or (self.controller.state == "FAULT"
+                                                 and self.c.loss_policy == "bench-disarm")):
                     result["throttle"] = self.output["throttle"]
                     result["arm"] = self.output["arm"]
                 return result
@@ -164,6 +167,11 @@ class AltRuntime:
                        "output_rc": self.output.copy(), **self.status})
         self.pending_samples.clear()
         return self.output.copy()
+
+    def record_send(self, now, output, lateness):
+        """Record every successfully written frame, including between control ticks."""
+        self.log.emit({"type": "crsf_send", "at_s": now, "output_rc": output.copy(),
+                       "loop_lateness_s": lateness, "state": self.controller.state})
 
 
 def monitor(config, duration, path):

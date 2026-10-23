@@ -85,6 +85,11 @@ class BMP581:
         if not self.device.get_interrupt_status() & self.device.kIntAssertedDrdy:
             return None
         data = self.device.get_sensor_data()
+        # DRDY can assert again between the status read and the data burst. If
+        # that conversion was already returned by the burst, publishing the next
+        # latched DRDY would count it twice. Discard that ambiguous notification;
+        # losing one conversion is preferable to inventing freshness.
+        self.device.get_interrupt_status()
         # SparkFun 2.0.0 decodes temperature as unsigned 24-bit; signed Q16 correction.
         temp = data.temperature - 256 if data.temperature >= 128 else data.temperature
         valid = (math.isfinite(data.pressure) and 30000 <= data.pressure <= 125000

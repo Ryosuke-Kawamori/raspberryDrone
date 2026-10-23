@@ -81,8 +81,37 @@ def rc_payload(rc, receiver_test=False):
 
 def send_rc(sock, address, rc, receiver_test=False, altitude=None):
     data = rc_payload(rc, receiver_test=receiver_test)
-    payload = json.dumps(altitude.decorate(data) if altitude else data).encode("utf-8")
+    data = altitude.decorate(data) if altitude else data
+    payload = json.dumps(data).encode("utf-8")
     sock.sendto(payload, address)
+    return data
+
+
+def detail_lines(sent, requested, status, ack_age, address, count, axes, buttons):
+    """Display the exact sent command separately from the receiver's report."""
+    lines = [f"TX #{count} -> {address[0]}:{address[1]} ({SEND_HZ}Hz nominal)",
+             "  CH1 roll={roll}  CH2 pitch={pitch}  CH3 throttle={throttle}  CH4 yaw={yaw}".format(**sent),
+             f"  CH5 ARM={2000 if sent['arm'] else 1000} ({'ON' if sent['arm'] else 'OFF'})"
+             f"  CH6 ANGLE={2000 if sent['angle'] else 1000} ({'ON' if sent['angle'] else 'OFF'})",
+             f"  throttle requested={requested['throttle']} sent={sent['throttle']}"
+             f"  receiver_test={sent.get('receiver_test', False)}",
+             "  raw axes: " + " ".join(f"{i}:{value:+.3f}" for i, value in enumerate(axes)),
+             "  pressed buttons: " + (", ".join(map(str, buttons)) or "none")]
+    if "alt_hold" in sent:
+        lines.append(f"  altitude hold={sent['alt_hold']} offset={sent['alt_offset_m']:+.2f}m"
+                     f" seq={sent['control_seq']} token_present={bool(sent['control_token'])}")
+    if status is None or ack_age is None or ack_age >= STATUS_TIMEOUT_S:
+        lines.append("RX: NO FRESH ACK (receiver output unknown)")
+    else:
+        lines.append(f"RX: ACK age={ack_age:.3f}s packets={status.get('packets', '?')}"
+                     f" link_age={status.get('link_age_ms', '?')}ms arm_ready={status.get('arm_ready', '?')}")
+        received = status.get("rc")
+        if isinstance(received, dict):
+            lines.append("  receiver RC: " + " ".join(f"{key}={received.get(key, '?')}"
+                         for key in ("roll", "pitch", "throttle", "yaw", "arm", "angle")))
+        lines.append("  RX is the bridge report; FC acceptance is not confirmed.")
+    lines.append("  TX JSON: " + json.dumps(sent, ensure_ascii=False))
+    return lines
 
 
 def print_overview(joystick, stick_span, deadzone, receiver_test):
@@ -122,6 +151,8 @@ def main():
     parser.add_argument("--throttle-up-button", type=int, default=5)
     parser.add_argument("--throttle-down-button", type=int, default=4)
     parser.add_argument("--altitude", action="store_true")
+    parser.add_argument("--details", action="store_true",
+                        help="Show sent JSON, channels, raw inputs and receiver ACK every 200ms.")
     parser.add_argument("--alt-hold-button", type=int, default=-1)
     parser.add_argument("--alt-up-button", type=int, default=-1)
     parser.add_argument("--alt-down-button", type=int, default=-1)
@@ -157,6 +188,7 @@ def main():
     last_status_at = 0.0
     prev_arm_pressed = False
     prev_angle_pressed = False
+    sent_count = 0
     period = 1.0 / SEND_HZ
 
     try:
@@ -211,17 +243,18 @@ def main():
                     if button_pressed(joystick, args.throttle_down_button):
                         rc["throttle"] = clamp(rc["throttle"] - 4, THROTTLE_MIN, THROTTLE_MAX)
 
-            send_rc(sock, address, rc, receiver_test=args.receiver_test, altitude=altitude)
+            sent = send_rc(sock, address, rc, receiver_test=args.receiver_test, altitude=altitude)
+            sent_count += 1
 
             status = read_status(sock)
             if status is not None:
                 last_status = status
-                last_status_at = time.time()
+                last_status_at = time.monotonic()
                 if altitude:
                     altitude.receive(status)
 
             link = "NO ACK"
-            if last_status is not None and time.time() - last_status_at < STATUS_TIMEOUT_S:
+            if last_status is not None and time.monotonic() - last_status_at < STATUS_TIMEOUT_S:
                 link = "ACK packets={} age={}ms".format(
                     last_status.get("packets", "?"),
                     last_status.get("link_age_ms", "?"),
@@ -232,7 +265,18 @@ def main():
                 "roll={roll:4d} pitch={pitch:4d} thr={throttle:4d} yaw={yaw:4d} "
                 "arm={arm} angle={angle} | {link}"
             ).format(link=link, **displayed)
-            if altitude:
+            if args.details:
+                if time.monotonic() >= next_alt_display:
+                    axes = [joystick.get_axis(i) for i in range(joystick.get_numaxes())]
+                    buttons = [i for i in range(joystick.get_numbuttons()) if joystick.get_button(i)]
+                    lines = detail_lines(sent, rc, last_status,
+                                         None if last_status is None else time.monotonic()-last_status_at,
+                                         address, sent_count, axes, buttons)
+                    if altitude:
+                        lines.extend(altitude.lines())
+                    sys.stdout.write("\n" + "\n".join(lines) + "\n")
+                    next_alt_display = time.monotonic()+.2
+            elif altitude:
                 # Separate lines retain fault text instead of truncating it at 120 columns.
                 if time.monotonic() >= next_alt_display:
                     sys.stdout.write("\n" + line + "\n" + "\n".join(altitude.lines()))

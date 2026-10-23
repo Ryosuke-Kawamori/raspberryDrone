@@ -11,6 +11,17 @@ BMP581 / VL53L4CDによる実験的な高度維持を追加しました。既定
 実行モード・配線確認・校正・検証手順は[高度維持ガイド](pi_zero/ALTITUDE.md)を参照してください。
 同梱設定ではliveは無効です。
 
+```bash
+python3 -m pi_zero.main --mode sensor-monitor --duration 30 --log sensors.jsonl
+python3 -m pi_zero.main --mode simulation --log simulation.jsonl
+python3 -m pi_zero.main --mode replay --replay simulation.jsonl --log replay.jsonl
+```
+
+センサー用依存関係は`pi_zero/requirements-sensors.txt`で導入します。
+購入基板の電源定格・レベル変換・プルアップは未確認です。配線前に高度維持ガイドの確認事項を参照してください。
+既定のThrottle上限1200とゲイン0はホバー検証済み設定ではありません。
+空中DISARMは墜落につながるため、故障時方針とFC側の受信途絶failsafeを実機で検証するまでliveを有効にしないでください。
+
 ## Directory structure
 
 ```text

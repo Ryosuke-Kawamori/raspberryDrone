@@ -53,6 +53,13 @@ class AltConfig:
 
     def __post_init__(self):
         for k, v in asdict(self).items():
+            expected = type(self.__dataclass_fields__[k].default)
+            if expected is float and type(v) not in (int, float):
+                raise ValueError(k + " must be numeric")
+            if expected is int and type(v) is not int:
+                raise ValueError(k + " must be an integer")
+            if expected is str and not isinstance(v, str):
+                raise ValueError(k + " must be text")
             if isinstance(v, (float, int)) and not isinstance(v, bool) and not math.isfinite(v):
                 raise ValueError(k + " must be finite")
         for k in ("manual_hover_verified", "sensor_range_verified", "gains_verified",
