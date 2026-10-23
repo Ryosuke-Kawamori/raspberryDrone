@@ -5,6 +5,9 @@ import queue
 import threading
 import time
 import math
+import signal
+import sys
+import shutil
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -16,6 +19,9 @@ from rc_protocol import default_rc
 
 def sensor_worker(config, name, output, stop):
     """One process per sensor: a wedged BMP transaction cannot starve ToF/CRSF."""
+    # The parent owns Ctrl+C and signals this worker through stop/terminate.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    output.put_nowait(Sample(name, -1, time.monotonic(), {}, False, "initializing sensor"))
     try:
         sensor = (BMP581 if name == "bmp" else VL53L4CD).open(config)
     except Exception as exc:
@@ -47,6 +53,9 @@ class SensorProcesses:
         ctx = mp.get_context("spawn")
         self.queue = ctx.Queue(maxsize=32)
         self.stop = ctx.Event()
+        self.started = time.monotonic()
+        self.last_seen = {name: self.started for name in ("tof", "bmp")}
+        self.last_error = {}
         self.processes = [ctx.Process(target=sensor_worker, args=(config, name, self.queue, self.stop),
                                      daemon=True) for name in ("tof", "bmp")]
         for p in self.processes:
@@ -59,6 +68,17 @@ class SensorProcesses:
                 samples.append(self.queue.get_nowait())
             except queue.Empty:
                 break
+        now = time.monotonic()
+        for sample in samples:
+            self.last_seen[sample.sensor] = now
+            self.last_error[sample.sensor] = sample.error
+        for name, process in zip(("tof", "bmp"), self.processes):
+            if now-self.last_seen[name] > 10:
+                reason = ("sensor worker exited: " + (self.last_error.get(name) or "no result")
+                          if not process.is_alive() else
+                          "initialization/read timeout (>10s); I2C worker not responding")
+                samples.append(Sample(name, -1, now, {}, False, reason))
+                self.last_seen[name] = now
         return sorted(samples, key=lambda s: s.at_s)
 
     def close(self):
@@ -174,11 +194,39 @@ class AltRuntime:
                        "loop_lateness_s": lateness, "state": self.controller.state})
 
 
+def monitor_lines(est, now, elapsed, log):
+    status = est.snapshot(now)
+    def number(value, unit):
+        return "--" if value is None else f"{value:.3f} {unit}"
+    lines = [f"SENSOR MONITOR | UART OFF / DISARMED | elapsed {elapsed:.1f}s | Ctrl+C to stop",
+             f"Height: {number(status['height_m'], 'm')} | vertical speed: {number(status['velocity_m_s'], 'm/s')}",
+             f"Floor distance: {number(status['floor_distance_m'], 'm')} | age: {number(status['age_s'], 's')}",
+             f"Estimate: {'VALID' if status['valid'] else 'INVALID'} | {status['quality']}"]
+    for name in ("tof", "bmp"):
+        sample = est.raw.get(name)
+        if sample is None:
+            lines.append(f"{name.upper()}: waiting for worker (initializing; watchdog 10s)")
+        else:
+            fresh = sample.valid and 0 <= now-sample.at_s <= est.c.stale_s
+            lines.append(f"{name.upper()}: {'VALID' if fresh else 'INVALID'} | age {now-sample.at_s:.2f}s"
+                         f" | status={sample.status} | {sample.error or ('OK' if fresh else 'stale')}")
+    bmp = est.raw.get("bmp")
+    values = bmp.values if bmp else {}
+    lines.extend([f"Pressure: {number(values.get('pressure_pa'), 'Pa')} | temperature: {number(values.get('temperature_c'), 'C')}",
+                  f"Baro height: {number(status['baro_height_m'], 'm')} | {status['baro_error'] or 'VALID'}",
+                  f"Baseline: {number(status['p0_pa'], 'Pa')} | mount height: {est.c.ground_sensor_height_m:.3f}m",
+                  "Calibration: keep stationary on the ground; attitude unmeasured / near-level only",
+                  f"Log: dropped={log.dropped} error={log.error or 'none'} | old values are invalid when stale"])
+    return lines
+
+
 def monitor(config, duration, path):
     log = AsyncLog(path, config, "sensor-monitor")
     source = SensorProcesses(config)
     est = Estimator(config)
     started = time.monotonic()
+    next_display = started
+    previous_lines = 0
     try:
         while duration is None or time.monotonic()-started < duration:
             now = time.monotonic()
@@ -189,8 +237,17 @@ def monitor(config, duration, path):
             log.emit({"type": "tick", "at_s": now, "samples": [asdict(s) for s in samples],
                       "input_rc": default_rc(), "hold": False, "offset_m": 0,
                       "link_ok": True, "secure": False, **status})
-            if int((now-started)*5) != int((now-started-config.control_period_s)*5):
-                print(json.dumps(status, ensure_ascii=False))
+            if now >= next_display:
+                lines = monitor_lines(est, now, now-started, log)
+                if sys.stdout.isatty():
+                    width = max(1, shutil.get_terminal_size().columns-1)
+                    prefix = f"\033[{previous_lines}A" if previous_lines else ""
+                    sys.stdout.write(prefix + "".join("\033[2K"+line[:width]+"\n" for line in lines))
+                    previous_lines = len(lines)
+                else:
+                    sys.stdout.write("\n".join(lines)+"\n\n")
+                sys.stdout.flush()
+                next_display = now+.2
             time.sleep(config.control_period_s)
     except KeyboardInterrupt:
         pass

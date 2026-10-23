@@ -394,3 +394,24 @@ def test_transmitted_frames_are_logged_with_independent_control_period():
 def test_config_rejects_wrong_types_before_hardware_opens(kw):
     with pytest.raises(ValueError):
         AltConfig(**kw)
+
+
+def test_monitor_watchdog_reports_unresponsive_worker_and_preserves_errors(monkeypatch):
+    import queue
+    from pi_zero.alt_runtime import SensorProcesses, monitor_lines
+    source = SensorProcesses.__new__(SensorProcesses)
+    source.queue = queue.Queue()
+    source.last_seen = {"tof": 0, "bmp": 0}
+    source.last_error = {"bmp": "No module named qwiic_bmp581"}
+    source.processes = [SimpleNamespace(is_alive=lambda: True), SimpleNamespace(is_alive=lambda: False)]
+    monkeypatch.setattr("pi_zero.alt_runtime.time.monotonic", lambda: 11)
+    samples = source.drain()
+    assert len(samples) == 2 and all(not sample.valid for sample in samples)
+    assert "timeout" in samples[0].error
+    assert "qwiic_bmp581" in samples[1].error
+    est = Estimator(AltConfig())
+    for sample in samples:
+        est.update(sample, 11)
+    lines = "\n".join(monitor_lines(est, 11, 11, MemoryLog()))
+    assert "UART OFF" in lines and "INVALID" in lines
+    assert "timeout" in lines and "qwiic_bmp581" in lines

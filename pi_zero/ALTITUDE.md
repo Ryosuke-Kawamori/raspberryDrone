@@ -85,12 +85,49 @@ python3 pc_keyboard_ui.py --ip 192.168.4.1 --altitude
 python3 pc_gamepad_ui.py --ip 192.168.4.1 --altitude --alt-hold-button 0 --alt-up-button 2 --alt-down-button 3
 ```
 
+`sensor-monitor`は端末上の同じ画面を約5Hzで更新します。高度・上下速度・床距離・気圧・温度、
+各センサーの有効性・経過時間・エラー・基準気圧を表示します。JSONLログは並行保存します。
+端末以外へのリダイレクトでは画面制御を使わず表示を追記します。
+初期化/読取が10秒以上応答しない場合は待ち続ける理由をエラー表示します。
+`waiting for ToF`だけでは配線不良を断定できません。初期化中、I2C待ち、子プロセス異常の可能性があります。
+`Ctrl+C`は親プロセスで処理し、子プロセスの停止を要求します。
+
 ゲームパッドの既存ARM=7、ANGLE=6、panic=1、Throttle上下=5/4との重複は拒否します。
 `--altitude`なしの旧UIはmanual/shadowで従来どおり手動操縦します。高度制御は発動しません。
 liveは新通信形式だけを受理します。Pico向けは従来どおり`--altitude`なしを使ってください。
 auto表示は計算値、out表示はPiがUARTへ出すRC値です。FCからの受理確認値ではありません。
 
 ## 座標・基準・品質
+
+### 手で上下させてThrottle計算だけを見る
+
+プロペラを外し、既存のUART送信プログラムを終了してください。
+`shadow`だけでは手動指令をFCへ送ります。次の`--dry-run`は必須で、UARTを開きません。
+
+```bash
+# Pi
+.venv/bin/python -m pi_zero.main --mode shadow --dry-run --alt-config pi_zero/altitude.bench.example.json --log bench.jsonl
+# PC
+python pc_gamepad_ui.py --ip 192.168.4.1 --altitude --alt-hold-button 0 --details
+```
+
+既に動作する独自センサー設定がある場合は、その設定のコピーへデモの`kp=100`, `ki=0`, `kd=30`,
+`freeze_s=10`だけを反映し、コピーを`--alt-config`に指定してください。
+デモ値はRC計算の符号を見るための架空値で、実機のホバーThrottle・ゲインではありません。
+凍結判定10秒も手持ち確認専用です。live検証フラグは全て既定falseで、live起動は拒否されます。
+
+1. PCのhold OFF、ARM OFF、Throttle=1000でACKを確認します。
+2. `--dry-run`を確認した状態でボタン7（既定）を押し、計算用のARM状態にします。
+3. ボタン5/4で表示上のmanual Throttleを約1150にします。これはホバー値の推奨ではありません。
+4. 平坦な床の上で相対高度0.3〜0.5m程度に手で保持し、品質が1秒以上安定したらボタン0を押します。
+5. `ALT_HOLD`になったことを確認し、ゆっくり上下させます。下げるとautoが増え、上げると減ります。
+
+PCの`thr manual/auto/out`の**autoが計算上のThrottle**です。outはshadowの手動値で、
+この起動ではUART送信自体がありません。基準1150・静止・高度誤差+0.1mならP項は+10、
+計算は約1160です（LPF・D項・変化率制限の影響があります）。
+ON時の現在高度が目標で、飛行可能なThrottleを推定する機能ではありません。
+急に動かす、測距範囲を外す、同じ測定値が10秒続く場合などはFAULTになります。
+再試行はARM OFF→Throttle=1000→ARM ON→hold OFF→ONです。
 
 内部はm、m/s、Pa、s。生温度は`temperature_c`、気圧式ではKです。
 ToFはセンサーから床までの距離で、離陸時に実測した`ground_sensor_height_m`を引き、
