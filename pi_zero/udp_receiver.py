@@ -70,19 +70,22 @@ class RcState:
         self.hold = False
         self.offset = 0.0
         self.expired = True
+        self.command_result = "waiting for command"
 
-    def failsafe(self):
+    def failsafe(self, invalidate_tokens=True):
         self.rc = default_rc()
         self.arm_ready = False
         self.hold = False
         self.secure = False
-        self.tokens.clear()
+        if invalidate_tokens:
+            self.tokens.clear()
         self.expired = True
 
     def expire(self, now):
         if not self.expired and (self.last_packet_at is None or
                                  not 0 <= now - self.last_packet_at < self.timeout_s):
             self.failsafe()
+            self.command_result = "UDP timeout"
 
     def accept(self, command, now):
         # Expire before accepting: an ARM packet after a gap cannot re-arm.
@@ -90,9 +93,16 @@ class RcState:
         secure = (command.token in self.tokens and
                   0 <= now-self.tokens[command.token] <= 0.4 and command.seq > self.last_seq)
         if (self.require_secure or self.secure_seen or command.token) and not secure:
+            reason = ("token missing/unknown" if command.token not in self.tokens else
+                      "token expired" if not 0 <= now-self.tokens[command.token] <= 0.4 else
+                      "sequence not increasing")
             # An explicit disarm remains authoritative even when its token expired.
             if not command.rc["arm"]:
-                self.failsafe()
+                # Once locked/disarmed, keep newly issued recovery challenges.
+                # Otherwise old OFF packets in flight revoke each fresh ACK token
+                # before the client can echo it, causing a permanent recovery loop.
+                self.failsafe(invalidate_tokens=not self.expired or self.rc["arm"])
+            self.command_result = "rejected: " + reason
             return
         if secure:
             self.last_seq = command.seq
@@ -107,11 +117,14 @@ class RcState:
             self.arm_ready = True
         if rc["arm"] and (not self.arm_ready or
                           (not self.rc["arm"] and rc["throttle"] != THROTTLE_MIN)):
+            reason = "ARM OFF + throttle 1000 required" if not self.arm_ready else "ARM requires throttle 1000"
             self.failsafe()
+            self.command_result = "rejected: " + reason
             return
         self.rc = rc
         self.hold = command.hold if secure else False
         self.offset = command.offset if secure else 0.0
+        self.command_result = "accepted"
 
     def status(self, now, packets):
         self.expire(now)
@@ -125,6 +138,8 @@ class RcState:
                             if self.last_packet_at is not None else 0),
             "rc": self.rc.copy(),
             "arm_ready": self.arm_ready,
+            "link_expired": self.expired,
+            "command_result": self.command_result,
             "control_token": token,
             "control_seq_floor": self.last_seq,
         }

@@ -415,3 +415,41 @@ def test_monitor_watchdog_reports_unresponsive_worker_and_preserves_errors(monke
     lines = "\n".join(monitor_lines(est, 11, 11, MemoryLog()))
     assert "UART OFF" in lines and "INVALID" in lines
     assert "timeout" in lines and "qwiic_bmp581" in lines
+
+
+@pytest.mark.parametrize("secure_required", [False, True])
+def test_delayed_off_packets_do_not_revoke_fresh_recovery_challenge(secure_required):
+    state = RcState(require_secure=secure_required)
+    state.accept(command(state, 0), 0)
+    state.accept(command(state, .01, arm=True), .01)
+    delayed_off = command(state, .02)
+    state.expire(.6)
+    fresh_off = command(state, .61)
+    last_accepted = state.last_packet_at
+    for now in (.62, .65, .68):
+        state.accept(delayed_off, now)
+        assert not state.rc["arm"] and not state.arm_ready
+        assert state.last_packet_at == last_accepted
+    state.accept(fresh_off, .71)
+    assert state.arm_ready and not state.expired
+    assert not state.rc["arm"]  # recovery alone never arms
+    state.accept(command(state, .72, arm=True), .72)
+    assert state.rc["arm"]
+
+
+def test_command_diagnostics_distinguish_acceptance_timeout_and_rejection():
+    state = RcState(require_secure=True)
+    state.accept(command(state, 0), 0)
+    assert state.status(.01, 1)["command_result"] == "accepted"
+    stale = command(state, .02)
+    state.expire(.6)
+    assert state.command_result == "UDP timeout"
+    state.accept(stale, .61)
+    report = state.status(.61, 2)
+    assert report["link_expired"] and "token" in report["command_result"]
+    assert state.last_packet_at == 0
+    state.accept(command(state, .62), .62)
+    assert state.command_result == "accepted" and state.arm_ready
+    state.accept(command(state, .63, arm=True, throttle=1150), .63)
+    assert state.command_result == "rejected: ARM requires throttle 1000"
+    assert not state.rc["arm"]

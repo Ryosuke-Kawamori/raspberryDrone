@@ -69,6 +69,9 @@ def run_loop(receiver, transport, state, should_stop,
                 if now >= next_alt_display:
                     logger.info("%s", altitude_summary(status["altitude"],
                                                       not isinstance(transport, DryRunTransport)))
+                    logger.info("RC link_expired=%s age_ms=%s arm_ready=%s arm=%s throttle=%s command=%s",
+                                status["link_expired"], status["link_age_ms"], status["arm_ready"],
+                                status["rc"]["arm"], status["rc"]["throttle"], status["command_result"])
                     next_alt_display = now+.5
             receiver.send_status(status)
             next_status = now + STATUS_PERIOD_S

@@ -1,0 +1,21 @@
+{
+  "kp": 100.0,
+  "ki": 0.0,
+  "kd": 30.0,
+  "throttle_min": 1000,
+  "throttle_max": 1200,
+  "correction_limit": 20.0,
+  "slew_per_s": 40.0,
+  "target_min_m": 0.10,
+  "target_max_m": 0.50,
+  "estimator_mode": "tof",
+  "loss_policy": "bench-disarm",
+  "manual_hover_verified": false,
+  "verified_hover_throttle": 0.0,
+  "sensor_range_verified": false,
+  "gains_verified": false,
+  "loss_policy_tested": false,
+  "fc_failsafe_tested": false,
+  "near_level_operation_accepted": false,
+  "verification_notes": "UNVERIFIED draft. Synthetic gains for shadow --dry-run hand-motion checks only. Hover throttle and mounting height not measured. bench-disarm is a propellers-off bench policy, not an airborne recovery policy. Live must remain disabled pending hardware verification."
+}

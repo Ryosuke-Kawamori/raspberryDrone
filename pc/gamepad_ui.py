@@ -105,6 +105,7 @@ def detail_lines(sent, requested, status, ack_age, address, count, axes, buttons
     else:
         lines.append(f"RX: ACK age={ack_age:.3f}s packets={status.get('packets', '?')}"
                      f" link_age={status.get('link_age_ms', '?')}ms arm_ready={status.get('arm_ready', '?')}")
+        lines.append(f"  command={status.get('command_result', '?')} link_expired={status.get('link_expired', '?')}")
         received = status.get("rc")
         if isinstance(received, dict):
             lines.append("  receiver RC: " + " ".join(f"{key}={received.get(key, '?')}"
